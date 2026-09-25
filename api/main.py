@@ -6,7 +6,7 @@ import uuid
 from typing import Literal, Optional
 
 import torch
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
@@ -36,12 +36,12 @@ torch.set_num_interop_threads(1)
 
 app = FastAPI(
     title="Procurement AI",
-    version="0.3.0"
+    version="0.3.1"
 )
 
 
 # =========================================================
-# Request models
+# Request Models
 # =========================================================
 
 class AnalyzeRequest(BaseModel):
@@ -66,9 +66,11 @@ class ResponseFormat(BaseModel):
 
 class ChatCompletionRequest(BaseModel):
     model: str
+
     messages: list[ChatMessage]
 
     temperature: float = 0
+
     max_tokens: Optional[int] = Field(
         default=300,
         ge=1,
@@ -81,7 +83,7 @@ class ChatCompletionRequest(BaseModel):
 
 
 # =========================================================
-# Model loading
+# Model Loading
 # =========================================================
 
 print("Loading tokenizer...")
@@ -117,7 +119,7 @@ model.eval()
 print("Procurement model ready.")
 
 
-# CPU generation should not run concurrently
+# CPU inference should not execute concurrently.
 generation_lock = threading.Lock()
 
 
@@ -130,17 +132,18 @@ def verify_api_key(
     x_api_key: str = ""
 ):
     """
-    Supports both:
+    Supports:
 
-    Authorization: Bearer <key>
+    Authorization: Bearer <API_KEY>
 
-    and the legacy:
+    and the existing:
 
-    X-API-Key: <key>
+    X-API-Key: <API_KEY>
     """
 
     supplied_key = None
 
+    # OpenAI-compatible Bearer authentication
     if authorization:
 
         parts = authorization.split(
@@ -152,39 +155,44 @@ def verify_api_key(
             len(parts) == 2
             and parts[0].lower() == "bearer"
         ):
-            supplied_key = parts[1]
+            supplied_key = parts[1].strip()
 
+    # Legacy X-API-Key support
     if supplied_key is None and x_api_key:
-        supplied_key = x_api_key
+        supplied_key = x_api_key.strip()
 
     if supplied_key != API_KEY:
 
         raise HTTPException(
             status_code=401,
-            detail="Invalid API key"
+            detail={
+                "error": {
+                    "message": "Invalid API key.",
+                    "type": "authentication_error",
+                    "code": "invalid_api_key"
+                }
+            }
         )
 
 
 # =========================================================
-# Prompt construction
+# Prompt Construction
 # =========================================================
 
 def build_procurement_prompt(
-    messages: list[ChatMessage],
-    json_mode: bool = False
-):
-
+    messages: list[ChatMessage]
+) -> str:
     """
-    Convert OpenAI messages into the prompt format used
-    during procurement LoRA training.
+    Convert OpenAI-compatible messages into the exact
+    basic prompt structure used during LoRA training.
 
-    Current LoRA was trained with:
+    Training format:
 
     You are a procurement analysis system.
     Return only valid JSON.
 
     USER:
-    ...
+    <request>
 
     ASSISTANT:
     """
@@ -199,21 +207,26 @@ def build_procurement_prompt(
 
         raise HTTPException(
             status_code=400,
-            detail="At least one user message is required."
+            detail={
+                "error": {
+                    "message":
+                        "At least one user message is required.",
+                    "type": "invalid_request_error",
+                    "code": "missing_user_message"
+                }
+            }
         )
 
-    # Current procurement model is a single-turn analysis model.
-    # Use the most recent user request.
+    # v0.2 is currently trained as a single-turn
+    # procurement-analysis model.
     user_message = user_messages[-1]
 
-    prompt = (
+    return (
         "You are a procurement analysis system.\n"
         "Return only valid JSON.\n\n"
         f"USER:\n{user_message}\n\n"
         "ASSISTANT:\n"
     )
-
-    return prompt
 
 
 # =========================================================
@@ -224,6 +237,10 @@ def generate_response(
     prompt: str,
     max_new_tokens: int = 300
 ):
+    """
+    Generate a response using the loaded Qwen base model
+    plus procurement LoRA adapter.
+    """
 
     inputs = tokenizer(
         prompt,
@@ -234,6 +251,7 @@ def generate_response(
 
     try:
 
+        # CPU generation should be serialized.
         with generation_lock:
 
             with torch.inference_mode():
@@ -263,16 +281,39 @@ def generate_response(
 
     except Exception as error:
 
-        # Do not expose internal model/server details.
+        # Log error type server-side without exposing
+        # implementation details to the caller.
         print(
             "Model generation failed:",
-            type(error).__name__
+            type(error).__name__,
+            str(error)
         )
 
         raise HTTPException(
             status_code=500,
-            detail="Model generation failed."
+            detail={
+                "error": {
+                    "message": "Model generation failed.",
+                    "type": "server_error",
+                    "code": "generation_failed"
+                }
+            }
         )
+
+
+# =========================================================
+# Root
+# =========================================================
+
+@app.get("/")
+def root():
+
+    return {
+        "service": "Procurement AI",
+        "status": "ok",
+        "version": "0.3.1",
+        "model": MODEL_ID
+    }
 
 
 # =========================================================
@@ -291,9 +332,16 @@ def health():
 
 
 # =========================================================
-# OpenAI-compatible models endpoint
+# OpenAI-Compatible Models
+#
+# Support BOTH:
+#
+# GET /models
+# GET /v1/models
+#
 # =========================================================
 
+@app.get("/models")
 @app.get("/v1/models")
 def list_models(
     authorization: str = Header(default=""),
@@ -301,12 +349,13 @@ def list_models(
 ):
 
     verify_api_key(
-        authorization,
-        x_api_key
+        authorization=authorization,
+        x_api_key=x_api_key
     )
 
     return {
         "object": "list",
+
         "data": [
             {
                 "id": MODEL_ID,
@@ -319,9 +368,22 @@ def list_models(
 
 
 # =========================================================
-# OpenAI-compatible Chat Completions
+# OpenAI-Compatible Chat Completions
+#
+# IMPORTANT:
+#
+# Support BOTH:
+#
+# POST /chat/completions
+# POST /v1/chat/completions
+#
+# LetsProcureAI is currently calling:
+#
+# POST /chat/completions
+#
 # =========================================================
 
+@app.post("/chat/completions")
 @app.post("/v1/chat/completions")
 def chat_completions(
     request: ChatCompletionRequest,
@@ -329,10 +391,19 @@ def chat_completions(
     x_api_key: str = Header(default="")
 ):
 
+    # -----------------------------------------------------
+    # Authentication
+    # -----------------------------------------------------
+
     verify_api_key(
-        authorization,
-        x_api_key
+        authorization=authorization,
+        x_api_key=x_api_key
     )
+
+
+    # -----------------------------------------------------
+    # Model validation
+    # -----------------------------------------------------
 
     if request.model != MODEL_ID:
 
@@ -348,7 +419,11 @@ def chat_completions(
             }
         )
 
-    # Streaming is intentionally not implemented yet.
+
+    # -----------------------------------------------------
+    # Streaming
+    # -----------------------------------------------------
+
     if request.stream:
 
         raise HTTPException(
@@ -363,31 +438,52 @@ def chat_completions(
             }
         )
 
+
+    # -----------------------------------------------------
+    # Determine JSON mode
+    # -----------------------------------------------------
+
     json_mode = (
         request.response_format is not None
         and
         request.response_format.type == "json_object"
     )
 
+
+    # -----------------------------------------------------
+    # Build procurement prompt
+    # -----------------------------------------------------
+
     prompt = build_procurement_prompt(
-        request.messages,
-        json_mode=json_mode
+        request.messages
     )
+
+
+    # -----------------------------------------------------
+    # Generate
+    # -----------------------------------------------------
 
     (
         response,
         prompt_tokens,
         completion_tokens
     ) = generate_response(
-        prompt,
+        prompt=prompt,
         max_new_tokens=request.max_tokens or 300
     )
 
-    # json_object means the model is expected to produce JSON.
-    # Validate it but DO NOT repair or modify the model output.
+
+    # -----------------------------------------------------
+    # Validate JSON when requested
+    #
+    # IMPORTANT:
+    # We validate but do NOT modify or repair model output.
+    # -----------------------------------------------------
+
     if json_mode:
 
         try:
+
             json.loads(response)
 
         except json.JSONDecodeError:
@@ -404,26 +500,44 @@ def chat_completions(
                 }
             )
 
+
+    # -----------------------------------------------------
+    # OpenAI-compatible response
+    # -----------------------------------------------------
+
     return {
-        "id": f"chatcmpl-{uuid.uuid4().hex}",
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": MODEL_ID,
+        "id":
+            f"chatcmpl-{uuid.uuid4().hex}",
+
+        "object":
+            "chat.completion",
+
+        "created":
+            int(time.time()),
+
+        "model":
+            MODEL_ID,
 
         "choices": [
             {
                 "index": 0,
+
                 "message": {
                     "role": "assistant",
                     "content": response
                 },
+
                 "finish_reason": "stop"
             }
         ],
 
         "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
+            "prompt_tokens":
+                prompt_tokens,
+
+            "completion_tokens":
+                completion_tokens,
+
             "total_tokens":
                 prompt_tokens + completion_tokens
         }
@@ -431,7 +545,16 @@ def chat_completions(
 
 
 # =========================================================
-# Existing Procurement API
+# Existing Procurement Analyze Endpoint
+#
+# Preserved for backward compatibility.
+#
+# Supports BOTH authentication mechanisms:
+#
+# X-API-Key
+#
+# Authorization: Bearer
+#
 # =========================================================
 
 @app.post("/v1/procurement/analyze")
@@ -442,8 +565,8 @@ def analyze(
 ):
 
     verify_api_key(
-        authorization,
-        x_api_key
+        authorization=authorization,
+        x_api_key=x_api_key
     )
 
     prompt = (
@@ -458,7 +581,7 @@ def analyze(
         _,
         _
     ) = generate_response(
-        prompt,
+        prompt=prompt,
         max_new_tokens=300
     )
 
