@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProcurementAnalysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "procurementCategory",
+    "confidence",
+    "summary",
+    "extractedInformation",
+    "missingInformation",
+    "recommendedWorkspace",
+    "requiresRuleRetrieval",
+    "ruleTopics",
+    "risks",
+    "clarificationQuestions",
+    "requiresHumanReview"
+  ],
+  "properties": {
+    "procurementCategory": {
+      "type": "string",
+      "enum": [
+        "GOODS",
+        "WORKS",
+        "CONSULTANCY",
+        "NON_CONSULTANCY",
+        "UNDETERMINED"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "summary": {
+      "type": "string"
+    },
+    "extractedInformation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": ["string", "null"]
+        },
+        "quantity": {
+          "type": ["number", "null"]
+        },
+        "unit": {
+          "type": ["string", "null"]
+        },
+        "estimatedValue": {
+          "type": ["number", "null"]
+        },
+        "currency": {
+          "type": ["string", "null"]
+        },
+        "duration": {
+          "type": ["string", "null"]
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "missingInformation": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommendedWorkspace": {
+      "type": "string",
+      "enum": [
+        "GOODS_NEED",
+        "WORKS_NEED",
+        "CONSULTANCY_NEED",
+        "NON_CONSULTANCY_NEED",
+        "CLARIFICATION_REQUIRED"
+      ]
+    },
+    "requiresRuleRetrieval": {
+      "type": "boolean"
+    },
+    "ruleTopics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "description"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "clarificationQuestions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "requiresHumanReview": {
+      "type": "boolean"
+    }
+  }
+}

@@ -1,0 +1,72 @@
+[
+  {
+    "id": "goods_laptops",
+    "prompt": "We need to procure 300 laptops for our regional offices.",
+    "expectedCategory": "GOODS",
+    "expectedWorkspace": "GOODS_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "goods_network_switches",
+    "prompt": "Our organization needs 25 network switches for the new data center.",
+    "expectedCategory": "GOODS",
+    "expectedWorkspace": "GOODS_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "goods_vehicles",
+    "prompt": "We need to purchase five vehicles for field operations.",
+    "expectedCategory": "GOODS",
+    "expectedWorkspace": "GOODS_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "works_warehouse",
+    "prompt": "We need to construct a new warehouse.",
+    "expectedCategory": "WORKS",
+    "expectedWorkspace": "WORKS_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "works_renovation",
+    "prompt": "We want to renovate three government office buildings.",
+    "expectedCategory": "WORKS",
+    "expectedWorkspace": "WORKS_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "consultancy_architecture",
+    "prompt": "We need a consulting firm to design an enterprise architecture for our organization.",
+    "expectedCategory": "CONSULTANCY",
+    "expectedWorkspace": "CONSULTANCY_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "consultancy_feasibility",
+    "prompt": "We need an independent consultant to conduct a feasibility study for a new information system.",
+    "expectedCategory": "CONSULTANCY",
+    "expectedWorkspace": "CONSULTANCY_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "nonconsultancy_cleaning",
+    "prompt": "We need a company to clean our offices for one year.",
+    "expectedCategory": "NON_CONSULTANCY",
+    "expectedWorkspace": "NON_CONSULTANCY_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "nonconsultancy_security",
+    "prompt": "We need security guard services for our headquarters for two years.",
+    "expectedCategory": "NON_CONSULTANCY",
+    "expectedWorkspace": "NON_CONSULTANCY_NEED",
+    "expectedRuleRetrieval": false
+  },
+  {
+    "id": "rule_method_threshold",
+    "prompt": "Which procurement method should I use for goods worth 8 million ETB?",
+    "expectedCategory": "GOODS",
+    "expectedWorkspace": "GOODS_NEED",
+    "expectedRuleRetrieval": true
+  }
+]
